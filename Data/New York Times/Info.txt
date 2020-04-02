@@ -1,0 +1,2 @@
+Aquired From:https://data.humdata.org/dataset/nyt-covid-19-data
+Source: https://github.com/nytimes/covid-19-data

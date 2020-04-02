@@ -1,0 +1,31 @@
+Sources for Data:
+
+CDC US Data At A Glance:
+https://www.cdc.gov/coronavirus/2019-ncov/cases-updates/cases-in-us.html
+
+CDC Data Resourfces:
+https://www.cdc.gov/datastatistics/index.html
+
+The Humanitarian Data Exchange:
+https://data.humdata.org/
+
+John Hopkinds COVID-19 Github:
+https://github.com/CSSEGISandData/COVID-19
+
+New York Times COVID-19 Github:
+https://github.com/nytimes/covid-19-data
+
+World Health Organization:
+https://www.who.int/emergencies/diseases/novel-coronavirus-2019/global-research-on-novel-coronavirus-2019-ncov
+
+Interesting Sources to Visualize COVID-19 Data:
+https://towardsdatascience.com/top-5-r-resources-on-covid-19-coronavirus-1d4c8df6d85f
+
+https://coronavirus.1point3acres.com/en
+
+https://www.worldometers.info/coronavirus/
+
+https://bnonews.com/index.php/2020/03/tracking-coronavirus-u-s-real-time-visualizations/
+
+Guide to Lockdown Stats:
+https://www.wsj.com/articles/a-state-by-state-guide-to-coronavirus-lockdowns-11584749351

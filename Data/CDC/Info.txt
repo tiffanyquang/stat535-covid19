@@ -1,0 +1,5 @@
+National Data
+Source and Acquired From: https://www.cdc.gov/surveillance/nrevss/coronavirus/natl-trends.html
+
+Regional Data
+Source and Acquired From:https://www.cdc.gov/surveillance/nrevss/coronavirus/region.html
