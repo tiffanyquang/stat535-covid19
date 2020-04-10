@@ -90,24 +90,27 @@ def step(ds, t0, t1):
 
 if __name__ == '__main__':
     # Constructs an example xarray Dataset for the simulation
-    times = pd.date_range('2000-01-01', periods=365)
+    times = pd.date_range('2000-01-01', periods=365+1)
     locations = np.array(['MA', 'VT', 'CA', 'TX'])
+    k = np.arange(1000)
     groups = np.array(['S', 'I', 'R'])
 
-    pop = xr.DataArray(0, coords=[times, locations, groups], dims=['t', 'loc', 'group'])
+    pop = xr.DataArray(0, coords=[times, locations, k, groups], dims=['t', 'loc', 'k', 'group'])
+    initMeanS = xr.DataArray(10000*rg.pareto(3, locations.shape), coords=[locations], dims=['loc'])
     initial = pop[{'t':0}]
-    initial.loc[{'group':'S'}] = (10000*rg.pareto(3, len(locations))).astype(int)
-    initial.loc[{'group':'I'}] = multinomial(1, xr.DataArray(np.ones_like(locations, int)))
+    initial.loc[{'group':'S'}] = rg.poisson(initMeanS.expand_dims({'k': k}, -1), initial.loc[{'group':'S'}].shape)
+    initial.loc[{'group':'I'}] = multinomial(1, xr.DataArray(np.ones_like(initial.loc[{'group':'I'}], int)))
     initial.loc[{'group':'R'}] = 0
 
-    transport = genTransportMatrix(initial.sum(dim='group'), xr.DataArray(rg.pareto(1, locations.shape*2), coords=[locations, locations], dims=['loc', 'outloc']), dim='loc', outdim='outloc')
+    transport = genTransportMatrix(initMeanS, xr.DataArray(rg.pareto(1, locations.shape*2), coords=[locations, locations], dims=['loc', 'outloc']), dim='loc', outdim='outloc')
 
     ds = xr.Dataset({'pop': pop,
                      'transport': transport,
                      'beta': xr.DataArray(rg.lognormal(0.1, 0.01, locations.shape), dims=['loc']),
                      'gamma': xr.DataArray(rg.lognormal(0.02, 0.001, locations.shape), dims=['loc'])})
 
-    t0, t1 = times[:2]
-    step(ds, t0, t1)
+    for i in range(len(times)-1):
+        step(ds, times[i], times[i+1])
 
-    print(ds[{'t':slice(None, 2)}])
+    for l in locations:
+        plt.plot(times, ds.pop.loc[{'loc':l, 'group':'S', 'k':0}])
