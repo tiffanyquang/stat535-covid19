@@ -1,0 +1,79 @@
+---
+title: "535Covid-19"
+author: "Elias Ghantous"
+date: "4/1/2020"
+output: html_document
+---
+
+
+```{r, include=FALSE}
+library(GGally)
+library(dplyr)
+library(car)
+library(broom)
+library(pander)
+library(ggmosaic)
+```
+
+
+Reading and merging the data:
+```{r, include = TRUE}
+
+colordat <- read.csv("states_by_color.csv", header = TRUE)
+namedat <- read.csv("name-abbr.csv", header = TRUE)
+covid_dat <- read.csv("states_covidcases.csv", header = TRUE)
+densitydat <- read.csv("state_density.csv" , header = TRUE)
+gdpdat <- read.csv("state_gdp.csv", header = TRUE)
+transportdat <- read.csv("state_transport.csv", header = TRUE)
+
+merge1 <- merge(covid_dat, namedat, by.x="state", by.y="state")
+merge2 <- merge(merge1, colordat, by.x="STATE", by.y="State")
+merge3 <- merge(merge2, densitydat, by.x="STATE", by.y="State")
+merge4 <- merge(merge3, gdpdat, by.x="STATE", by.y="State")
+data1 <- merge(merge4, transportdat, by.x="STATE", by.y="ï..STATE")
+
+head(data1)
+
+##Omitting missing data:
+#data1 <- na.omit(data1)
+```
+
+The predictor variables we will use are: governorParty, Density, LandArea, stateGDP, Pop, Airports, Automobiles, Buses. The outcome variable is positive. 
+
+```{r, include=TRUE}
+## q-q plot for Pop:
+ggplot(data1) +
+geom_qq(aes(sample = Pop))
+
+data1$log.Pop <- log(data1$Pop)
+
+## q-q plot for Pop after log transformation:
+ggplot(data1) +
+geom_qq(aes(sample = log.Pop))
+
+## q-q plot for stateGDP:
+ggplot(data1) +
+geom_qq(aes(sample = stateGDP))
+
+data1$log.stateGDP <- log(data1$stateGDP)
+
+## q-q plot for stateGDP after log transformation:
+ggplot(data1) +
+geom_qq(aes(sample = log.stateGDP))
+
+##Making governorParty a factor:
+data1$governorParty <- factor(data1$governorParty)
+
+```
+We'll use a log transformation for the population and gdp since the q-q plots look better. 
+
+Making the regression model and checking the summary:
+```{r, include=TRUE}
+
+covidreg <- lm(positive ~ governorParty + Density+ LandArea+ log.stateGDP + log.Pop + Airports, data = data1)
+
+summary(covidreg)
+
+plot(covidreg)
+```
+

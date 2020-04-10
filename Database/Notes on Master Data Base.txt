@@ -1,0 +1,57 @@
+master_state_data
+(
+- This is the main database with statistics on the various states
+
+Column information
+	(
+	state_density table source: https://worldpopulationreview.com/
+		values
+		(
+		Density
+		Pop
+		LandArea
+		)
+	state_gdp table source: https://worldpopulationreview.com/
+		values
+		(
+		gdpRank
+		stateGDP
+		stateGDPperc
+		gdpGrowth2018
+		)
+	state_transport source: https://www.globalair.com/airport/state.aspx
+		values
+		(
+		Airports
+		Automobiles
+		Buses
+		)
+	states_colors source: https://worldpopulationreview.com/states/blue-states/
+		values
+		(
+		pvi
+		governorParty
+		senateParty
+		houseBalance
+		)
+	states_covidcases course: https://github.com/COVID19Tracking/covid-tracking-data/
+		values
+		(
+		positive
+		positiveScore
+		negativeScore
+		negativeRegularScore
+		commercialScore
+		grade
+		score
+		negative
+		pending
+		hospitalized
+		death
+		total
+		totalTestResults
+		fips
+		)
+	)
+	
+)
