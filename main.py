@@ -94,9 +94,9 @@ def step(ds, t0, t1):
     nS = new.pop.loc[{'group':'S'}]
     nI = new.pop.loc[{'group':'I'}]
     nR = new.pop.loc[{'group':'R'}]
-    infections = rg.binomial(nS, -np.expm1(-new.iRate*dt*nI/(nS+nI+nR)))
-    recoveries = nI.copy(data=rg.binomial(*xr.broadcast(nI, -np.expm1(-new.rRate*dt))))
-    deaths = rg.binomial(*xr.broadcast(recoveries, -np.expm1(-new.dRate*dt)))
+    infections = nS - rg.binomial(nS, np.exp(-new.iRate*dt*nI/(nS+nI+nR)))
+    recoveries = nI.copy(data=nI-rg.binomial(*xr.broadcast(nI, np.exp(-new.rRate*dt))))
+    deaths = rg.binomial(*xr.broadcast(recoveries, new.dRate))
     nS[:] = nS - infections
     nI[:] = nI + infections - recoveries
     nR[:] = nR + recoveries - deaths
@@ -104,7 +104,7 @@ def step(ds, t0, t1):
 
 if __name__ == '__main__':
     # Constructs an example xarray Dataset for the simulation
-    times = pd.date_range('2000-01-01', periods=90+1)
+    times = pd.date_range(start='2020-04-01', end='2020-04-30', periods=500+1)
     locations = np.array(['MA', 'VT', 'CA', 'TX'])
     k = np.arange(1000)
     groups = np.array(['S', 'I', 'R'])
@@ -122,7 +122,7 @@ if __name__ == '__main__':
                      'transport': transport,
                      'iRate': xr.DataArray(rg.lognormal(1, 0.1, locations.shape), dims=['loc']),
                      'rRate': xr.DataArray(rg.lognormal(0.01, 0.001, locations.shape), dims=['loc']),
-                     'dRate': xr.DataArray(rg.lognormal(0.01, 0.001, locations.shape), dims=['loc'])})
+                     'dRate': xr.DataArray(rg.beta(0.01, 0.99, locations.shape), dims=['loc'])})
 
     for i in range(len(times)-1):
         step(ds, times[i], times[i+1])
