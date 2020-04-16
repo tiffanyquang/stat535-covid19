@@ -18,45 +18,32 @@ import matplotlib.pyplot as plt
 rg = np.random.default_rng([ord(c) for c in 'S535 COVID-19 Forecasting'])
 # rg = np.random.default_rng()
 
-
-# def multinomial(n, p, dim=None, axis=None, out=None, rg=rg):
+# @profile
 def multinomial(n, p, dim, out=None, rg=rg):
-    n = xr.DataArray(n)
-    p = xr.DataArray(p)
+    if not isinstance(n, xr.DataArray):
+        n = xr.DataArray(n)
+    if not isinstance(p, xr.DataArray):
+        p = xr.DataArray(p)
 
-    condn = n.broadcast_like(p).copy()
+
+    condn = n.broadcast_like(p[{dim:0}]).copy()
     if out is None:
-        out = condn.copy()
+        out = xr.zeros_like(p, int)
 
-    # if dim not in p.dims:
-    #     if axis is not None:
-    #         dim = p.dims[axis]
-    #     else:
-    #         dim = p.dims[-1]
     p = p/p.sum(dim=dim)
 
-    condp = xr.zeros_like(p)
-    condp[{dim:0}] = p[{dim:0}]
-    condp[{dim:slice(1, None)}] = (p[{dim:slice(1, None)}]/(1-p.shift({dim: 1}, 0)[{dim:slice(1, None)}].cumsum(dim=dim)))
-    condp = np.clip(condp.fillna(1), 0, 1)
+    condp = np.clip(p/(1-p.shift({dim: 1}, 0).cumsum(dim=dim)), 0, 1)
+    np.clip(p[{dim:0}], 0, 1, out=condp[{dim:0}].data)
+    condp.data[np.isnan(condp.data)] = 1
 
-    for i in range(condp.sizes[dim]):
-        out[{dim:i}] = rg.binomial(condn[{dim:i}], condp[{dim:i}])
-        condn[{dim:slice(i+1, None)}] -= out[{dim:i}]
-
+    tk = condp.sizes[dim]
+    for i in range(tk - 1):
+        out[{dim:i}] = rg.binomial(condn, condp[{dim:i}])
+        condn.data -= out[{dim:i}].data
+    out[{dim:tk-1}] = rg.binomial(condn, condp[{dim:tk-1}])
     return out
 
-def genTransportMatrixOLD(s, t0):
-    """
-    Generates a transport matrix with a given stationary state s, starting from t0.
-    """
-    so = np.repeat(s[..., None], s.shape[-1], axis=-1)
-
-    def f(x):
-        y = x*so/np.einsum('...ij,...jk->...ik', x, so)
-        return so*y/np.einsum('...ij,...jk->...ik', so, y)
-    return optimize.fixed_point(f, t0, xtol=2*np.finfo(float).eps, method='iteration')
-
+@profile
 def genTransportMatrix(s, m0, dim, outdim, rate=1):
     """
     Generates a normalized transport rate matrix with a given stationary state s, starting from m0.
@@ -67,39 +54,36 @@ def genTransportMatrix(s, m0, dim, outdim, rate=1):
 
     def f(x):
         y = x*so/x.dot(so, dims=[outdim])
-        # print(np.abs(y-x*so/np.einsum('...ij,...jk->...ik', x, so)).max())
         z = y*so/y.dot(so.rename({dim:outdim, outdim:dim}), dims=[dim])
-        # print(np.abs(z-so*y/np.einsum('...ij,...jk->...ik', so, y)).max())
         return z
 
-    # m = optimize.fixed_point(f, m0, xtol=2*np.finfo(float).eps, method='iteration') - (incoords == outcoords)
     old = m0.copy()
     m = f(m0)
     for i in range(1000):
-        old[:] = m
-        m[:] = f(m)
-        err = np.abs(m-old).max()
-        if err < 2*np.finfo(float).eps:
+        old.data[:] = m.data
+        m.data[:] = f(m).data
+        if (np.abs(m-old) < 2*np.finfo(float).eps).data.all():
             break
     lm = m.copy(data=logm(m))
     ident = (incoords == outcoords)
     return -rate*len(incoords)*(lm/lm.dot(ident, dims=[dim, outdim]))
 
+# @profile
 def step(ds, t0, t1):
     dt = (t1-t0)/np.timedelta64(1,'D')
     current = ds.loc[{'t':t0}]
     new = ds.loc[{'t':t1}]
-    finTransport = current.transport.copy(data=expm(dt*current.transport.values))
-    new.pop[:] = multinomial(current.pop.sum(dim='loc'), finTransport.dot(current.pop, dims=['loc']).rename({'outloc':'loc'}), dim='loc')
+    finTransport = current.transport.copy(data=expm(dt*current.transport.values).real)
+    new.pop[:] = multinomial(current.pop.sum(dim='loc'), finTransport.dot(current.pop, dims=['loc']).swap_dims({'outloc':'loc'}), dim='loc')
     nS = new.pop.loc[{'group':'S'}]
     nI = new.pop.loc[{'group':'I'}]
     nR = new.pop.loc[{'group':'R'}]
     infections = nS - rg.binomial(nS, np.exp(-new.iRate*dt*nI/(nS+nI+nR)))
-    recoveries = nI.copy(data=nI-rg.binomial(*xr.broadcast(nI, np.exp(-new.rRate*dt))))
+    recoveries = nI - rg.binomial(*xr.broadcast(nI, np.exp(-new.rRate*dt)))
     deaths = rg.binomial(*xr.broadcast(recoveries, new.dRate))
-    nS[:] = nS - infections
-    nI[:] = nI + infections - recoveries
-    nR[:] = nR + recoveries - deaths
+    nS.data[:] = nS.data - infections.data
+    nI.data[:] = nI.data + infections.data - recoveries.data
+    nR.data[:] = nR.data + recoveries.data - deaths.data
 
 
 if __name__ == '__main__':
@@ -113,7 +97,7 @@ if __name__ == '__main__':
     initMeanS = xr.DataArray(10000*rg.pareto(3, locations.shape), coords=[locations], dims=['loc'])
     initial = pop[{'t':0}]
     initial.loc[{'group':'S'}] = rg.poisson(initMeanS.expand_dims({'k': k}, -1))
-    initial.loc[{'group':'I'}] = multinomial(1, xr.ones_like(initial.loc[{'group':'I'}], int), 'loc')
+    initial.loc[{'group':'I'}] = multinomial(1, xr.ones_like(initial.loc[{'group':'I'}], int), 'loc').broadcast_like(initial.loc[{'group':'I'}])
     initial.loc[{'group':'R'}] = 0
 
     transport = genTransportMatrix(initMeanS, xr.DataArray(rg.pareto(1, locations.shape*2), coords=[locations, locations], dims=['loc', 'outloc']), dim='loc', outdim='outloc', rate=0.01)
