@@ -18,7 +18,6 @@ import matplotlib.pyplot as plt
 rg = np.random.default_rng([ord(c) for c in 'S535 COVID-19 Forecasting'])
 # rg = np.random.default_rng()
 
-# @profile
 def multinomial(n, p, dim, out=None, rg=rg):
     if not isinstance(n, xr.DataArray):
         n = xr.DataArray(n)
@@ -43,7 +42,6 @@ def multinomial(n, p, dim, out=None, rg=rg):
     out[{dim:tk-1}] = rg.binomial(condn, condp[{dim:tk-1}])
     return out
 
-@profile
 def genTransportMatrix(s, m0, dim, outdim, rate=1):
     """
     Generates a normalized transport rate matrix with a given stationary state s, starting from m0.
@@ -68,7 +66,6 @@ def genTransportMatrix(s, m0, dim, outdim, rate=1):
     ident = (incoords == outcoords)
     return -rate*len(incoords)*(lm/lm.dot(ident, dims=[dim, outdim]))
 
-# @profile
 def step(ds, t0, t1):
     dt = (t1-t0)/np.timedelta64(1,'D')
     current = ds.loc[{'t':t0}]
