@@ -7,96 +7,76 @@ Naïve SIR model with transport.
 """
 
 import numpy as np
-# import scipy as sp
-# import xarray as xr  # TODO: Convert to DataArrays?
-from scipy import optimize
-import matplotlib.pyplot as plt
+import xarray as xr
+from scipy.linalg import expm, logm
 
 
-def genTransportMatrix(s, t0):
-    """
-    Generates a transport matrix with a given stationary state s, starting from t0.
-    """
-    so = np.repeat(s[..., None], s.shape[-1], axis=-1)
+def multinomial(n, p, dim, out=None, rg=None):
+    if rg is None:
+        rg = np.random.default_rng()
 
-    def f(x):
-        y = x*so/np.einsum('...ij,...jk->...ik', x, so)
-        return so*y/np.einsum('...ij,...jk->...ik', so, y)
-    return optimize.fixed_point(f, t0, xtol=2*np.finfo(float).eps, method='iteration')
+    if not isinstance(n, xr.DataArray):
+        n = xr.DataArray(n)
+    if not isinstance(p, xr.DataArray):
+        p = xr.DataArray(p)
 
-def normalizeTMatrix(t, r):
-    """
-    Normalizes the transport matrix to have average of r coming out of each vertex.
-    """
-    tid = np.identity(t.shape[-1])
-    dt = t-tid
-    return tid - r*t.shape[-1]*dt/np.trace(dt)
 
-def multinomial_rvs(count, p):
-    """
-    Sample from the multinomial distribution with multiple p vectors.
+    condn = n.broadcast_like(p[{dim:0}]).copy()
+    if out is None:
+        out = xr.zeros_like(p, int)
 
-    * count must be an (n-1)-dimensional numpy array.
-    * p must an n-dimensional numpy array, n >= 1.  The last axis of p
-      holds the sequence of probabilities for a multinomial distribution.
+    p = p/p.sum(dim=dim)
 
-    The return value has the same shape as p.
+    condp = np.clip(p/(1-p.shift({dim: 1}, 0).cumsum(dim=dim)), 0, 1)
+    np.clip(p[{dim:0}], 0, 1, out=condp[{dim:0}].data)
+    condp.data[np.isnan(condp.data)] = 1
 
-    Modified from https://stackoverflow.com/q/55818845.
-    """
-    count = count.copy()
-    out = np.zeros(p.shape, dtype=int)
-    ps = p.cumsum(axis=-1)
-    # Conditional probabilities
-    with np.errstate(divide='ignore', invalid='ignore'):
-        condp = p / ps
-    condp[np.isnan(condp)] = 0.0
-    for i in range(p.shape[-1]-1, 0, -1):
-        binsample = rg.binomial(count, condp[..., i])
-        out[..., i] = binsample
-        count -= binsample
-    out[..., 0] = count
+    tk = condp.sizes[dim]
+    for i in range(tk - 1):
+        out[{dim:i}] = rg.binomial(condn, condp[{dim:i}])
+        condn.data -= out[{dim:i}].data
+    out[{dim:tk-1}] = rg.binomial(condn, condp[{dim:tk-1}])
     return out
 
-
-# TODO: Make this a class, or drasticly parallelize for different parameters.
-rg = np.random.default_rng(12345)
-nvert = 10  # Number of cities/states/etc.
-sus = (10000*rg.pareto(3, nvert)).astype(int)  # Initial susceptible populations
-inf = np.zeros_like(sus)  # Initial infected populations
-inf[0] = 1
-# Very sensitive to these parameters
-beta = 0.0001  # Rate of infection per interaction
-gamma = 0.02  # Recovery/death rate
-
-# TODO: Replace with a data-driven model.
-trate = 0.1
-transport = normalizeTMatrix(genTransportMatrix(sus, rg.pareto(1, (nvert, nvert))), trate)
-
-
-def step(sus, inf):
+def genTransportMatrix(s, m0, dim, outdim, rate=1):
     """
-    Iterates the simulation.
-
-    TODO: Implement over an arbitrary timestep? Matrix exponentials, etc.
+    Generates a normalized transport rate matrix with a given stationary state s, starting from m0.
     """
-    tS = multinomial_rvs(sus, transport.T).sum(axis=0)  # Hopefully these are implemented correctly.
-    tI = multinomial_rvs(inf, transport.T).sum(axis=0)
-    bIS = rg.binomial(tS, 1-(1-beta)**np.sqrt(inf))  # This should be replaced by a researched result.
-    gI = rg.binomial(tI + bIS, gamma)
-    return (tS - bIS, tI + bIS - gI)
+    incoords = m0.coords[dim]
+    outcoords = m0.coords[outdim]
+    so = s.expand_dims({outdim: outcoords}, -1).rename({dim:outdim, outdim:dim})
 
+    def f(x):
+        y = x*so/x.dot(so, dims=[outdim])
+        z = y*so/y.dot(so.rename({dim:outdim, outdim:dim}), dims=[dim])
+        return z
 
-n = 1000  # TODO: Multiple runs
-k = 1000  # Number of timesteps
-si = np.empty((k,2)+sus.shape, int)
-si[0] = sus, inf
-for i in range(1, k):
-    si[i] = step(*si[i-1])
+    old = m0.copy()
+    m = f(m0)
+    for i in range(1000):
+        old.data[:] = m.data
+        m.data[:] = f(m).data
+        if (np.abs(m-old) < 2*np.finfo(float).eps).data.all():
+            break
+    lm = m.copy(data=logm(m))
+    ident = (incoords == outcoords)
+    return -rate*len(incoords)*(lm/lm.dot(ident, dims=[dim, outdim]))
 
-for i in range(nvert):
-    # plt.plot(si[:,0,i])  # Plot uninfected
-    plt.plot(si[:,1,i])  # Plot infected
-    # plt.plot(si.sum(axis=1)[:, i])  # Plot Total
-# plt.yscale('log')
-plt.show()
+def step(ds, t0, t1, rg=None):
+    if rg is None:
+        rg = np.random.default_rng()
+
+    dt = (t1-t0)/np.timedelta64(1,'D')
+    current = ds.loc[{'t':t0}]
+    new = ds.loc[{'t':t1}]
+    finTransport = current.transport.copy(data=expm(dt*current.transport.values).real)
+    new.pop[:] = multinomial(current.pop.sum(dim='loc'), finTransport.dot(current.pop, dims=['loc']).swap_dims({'outloc':'loc'}), dim='loc')
+    nS = new.pop.loc[{'group':'S'}]
+    nI = new.pop.loc[{'group':'I'}]
+    nR = new.pop.loc[{'group':'R'}]
+    infections = nS - rg.binomial(nS, np.exp(-new.iRate*dt*nI/(nS+nI+nR+1)))
+    recoveries = nI - rg.binomial(*xr.broadcast(nI, np.exp(-new.rRate*dt)))
+    deaths = rg.binomial(*xr.broadcast(recoveries, new.dRate))
+    nS.data[:] = nS.data - infections.data
+    nI.data[:] = nI.data + infections.data - recoveries.data
+    nR.data[:] = nR.data + recoveries.data - deaths.data
