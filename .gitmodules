@@ -1,6 +1,3 @@
 [submodule "JHData"]
 	path = JHData
 	url = https://github.com/CSSEGISandData/COVID-19.git
-[submodule "COVID19-SIR"]
-	path = Basic SIR
-	url = https://github.com/Lewuathe/COVID19-SIR.git
