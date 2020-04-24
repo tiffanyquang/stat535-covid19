@@ -11,7 +11,6 @@ import xarray as xr
 from scipy.linalg import expm, logm
 
 
-@profile
 def multinomial(n, p, dim, out=None, rg=None):
     if rg is None:
         rg = np.random.default_rng()
@@ -28,8 +27,7 @@ def multinomial(n, p, dim, out=None, rg=None):
     p = p/p.sum(dim=dim)
     p.data[np.isnan(p.data)] = 0
 
-    condp = p/(1-p.shift({dim: 1}, 0).cumsum(dim=dim))
-    condp.data[condp.data]
+    condp = np.clip(p/(1-p.shift({dim: 1}, 0).cumsum(dim=dim)), 0, 1)
     np.clip(p[{dim:0}], 0, 1, out=condp[{dim:0}].data)
     condp.data[np.isnan(condp.data)] = 1
 
@@ -64,7 +62,6 @@ def genTransportMatrix(s, m0, dim, outdim, rate=1):
     ident = (incoords == outcoords)
     return -rate*len(incoords)*(lm/lm.dot(ident, dims=[dim, outdim]))
 
-@profile
 def step(ds, t0, t1, rg=None):
     if rg is None:
         rg = np.random.default_rng()

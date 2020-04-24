@@ -11,7 +11,7 @@ k = np.arange(5000)
 groups = np.array(['S', 'I', 'R'])
 
 # times = pd.read_csv('times.csv', parse_dates=True)
-times = pd.date_range(start='2020-04-01', end='2020-04-30', freq='0.25D')
+times = pd.date_range(start='2020-04-01', end='2020-07-01', freq='1D')
 data_raw = pd.read_csv('../Database/master_state_data.csv', index_col=0)
 locations = data_raw.index
 pop = xr.DataArray(0, coords=[times, locations, k, groups], dims=['t', 'loc', 'k', 'group'])
@@ -22,7 +22,7 @@ initial.loc[{'group':'S'}] = xr.DataArray(data_raw['Pop'] - data_raw['positive_0
 # transport = xr.DataArray(pd.read_csv('transport.csv', index_col=0), coords=[locations, locations], dims=['loc', 'outloc'])
 # transport = xr.DataArray(0, coords=[locations, locations], dims=['loc', 'outloc'])
 initMeanS = xr.DataArray(10000*rg.pareto(3, locations.shape), coords=[locations], dims=['loc'])
-transport = sirt.genTransportMatrix(initMeanS, xr.DataArray(rg.pareto(1, locations.shape*2), coords=[locations, locations], dims=['loc', 'outloc']), dim='loc', outdim='outloc', rate=0.01)
+transport = sirt.genTransportMatrix(initMeanS, xr.DataArray(rg.pareto(1, locations.shape*2), coords=[locations, locations], dims=['loc', 'outloc']), dim='loc', outdim='outloc', rate=0.1)
 
 # rates = xr.Dataset(pd.read_csv('rates.csv'))
 
@@ -31,8 +31,8 @@ ds = xr.Dataset({'pop': pop,
                  # 'iRate': rates['infection'],
                  # 'rRate': rates['recovery'],
                  # 'dRate': rates['death']})
-                 'iRate': xr.DataArray(rg.lognormal(1, 0.1, locations.shape), dims=['loc']),
-                 'rRate': xr.DataArray(rg.lognormal(0.01, 0.001, locations.shape), dims=['loc']),
+                 'iRate': xr.DataArray(rg.lognormal(-2.065, 0.99, locations.shape), dims=['loc']),
+                 'rRate': xr.DataArray(rg.lognormal(np.log(0.1), 1, locations.shape), dims=['loc']),
                  'dRate': xr.DataArray(rg.beta(0.01, 0.99, locations.shape), dims=['loc'])})
 
 for i in range(len(times)-1):

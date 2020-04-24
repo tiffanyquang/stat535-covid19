@@ -60,8 +60,12 @@ print(beta_log_stats)
 beta_log_valid = beta_log.values.flat
 beta_log_valid = beta_log_valid[~np.isnan(beta_log_valid)]
 
-plt.hist(beta_log_valid, bins=100, density=True)
+fig, ax = plt.subplots()
+fig.set_size_inches(5, 3)
+ax.hist(beta_log_valid, bins=100, density=True)
 x = np.linspace(beta_log_valid.min(), beta_log_valid.max(), 300)
 y = np.exp(-(x-beta_log_all_mean)**2/(2*beta_log_all_std**2))/(np.sqrt(2*np.pi)*beta_log_all_std)
-plt.plot(x, y)
-plt.show()
+ax.plot(x, y)
+ax.set_xlabel(r'$\log(\beta)$')
+fig.savefig('beta_hist.pdf', bbox_inches='tight')
+fig.savefig('beta_hist.png', bbox_inches='tight')
