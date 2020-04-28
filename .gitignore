@@ -138,3 +138,6 @@ dmypy.json
 cython_debug/
 
 .DS_Store
+
+#Big file
+SIRT/out/data.nc
